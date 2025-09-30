@@ -2,54 +2,99 @@
 $page_title = 'Ürünler ve Hizmetler';
 require_once __DIR__ . '/../includes/header.php';
 
-// Bu sayfaya sadece giriş yapmış kullanıcılar erişebilir
 require_login();
 
-// Veritabanı bağlantısını al
 $pdo = get_db_connection();
 
-// Mevcut organizasyonun ürünlerini getir
-$stmt = $pdo->prepare("SELECT * FROM products WHERE organization_id = ? ORDER BY name ASC");
-$stmt->execute([$_SESSION['organization_id']]);
+// Arama terimini al
+$search_term = $_GET['search'] ?? '';
+
+// SQL sorgusunu arama terimine göre dinamik olarak oluştur
+$sql = "SELECT * FROM products WHERE organization_id = ?";
+$params = [$_SESSION['organization_id']];
+
+if (!empty($search_term)) {
+    // Arama terimi varsa, WHERE koşuluna ek yap
+    $sql .= " AND (name LIKE ? OR description LIKE ?)";
+    $params[] = "%" . $search_term . "%";
+    $params[] = "%" . $search_term . "%";
+}
+$sql .= " ORDER BY name ASC";
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
 $products = $stmt->fetchAll();
 ?>
 
-<div class="page-header">
-    <h1>Ürün ve Hizmet Yönetimi</h1>
-    <a href="product_form.php" class="button-primary">Yeni Ürün/Hizmet Ekle</a>
-</div>
+<header class="page-header">
+    <h1 class="page-title">Ürün ve Hizmet Yönetimi</h1>
+    <a href="product_form.php" role="button">Yeni Ürün/Hizmet Ekle</a>
+</header>
 
-<table>
-    <thead>
-        <tr>
-            <th>Ürün/Hizmet Adı</th>
-            <th>Açıklama</th>
-            <th>Birim</th>
-            <th>Fiyat</th>
-            <th>İşlemler</th>
-        </tr>
-    </thead>
-    <tbody>
-        <?php if (empty($products)): ?>
+<article class="search-bar">
+    <form action="products.php" method="GET">
+        <div class="grid">
+            <input type="search" id="search" name="search" placeholder="Ürün adı veya açıklamasına göre ara..." value="<?php echo e($search_term); ?>">
+            <button type="submit">Ara</button>
+        </div>
+    </form>
+</article>
+
+<figure>
+    <table>
+        <thead>
             <tr>
-                <td colspan="5" style="text-align:center;">Henüz hiç ürün veya hizmet eklenmemiş.</td>
+                <th scope="col">Ürün/Hizmet Adı</th>
+                <th scope="col">Birim</th>
+                <th scope="col">Fiyat</th>
+                <th scope="col">İşlemler</th>
             </tr>
-        <?php else: ?>
-            <?php foreach ($products as $product): ?>
+        </thead>
+        <tbody>
+            <?php if (empty($products)): ?>
                 <tr>
-                    <td><?php echo e($product['name']); ?></td>
-                    <td><?php echo e(substr($product['description'] ?? '', 0, 50) . '...'); ?></td>
-                    <td><?php echo e($product['unit']); ?></td>
-                    <td><?php echo e(number_format($product['price'], 2, ',', '.')); ?> TL</td>
-                    <td class="actions">
-                        <a href="product_form.php?id=<?php echo e($product['id']); ?>" class="button-edit">Düzenle</a>
-                        <a href="../api/product_handler.php?action=delete&id=<?php echo e($product['id']); ?>" class="button-delete" onclick="return confirm('Bu ürünü silmek istediğinizden emin misiniz?');">Sil</a>
+                    <td colspan="4" style="text-align:center;">
+                        <?php echo empty($search_term) ? 'Henüz hiç ürün veya hizmet eklenmemiş.' : 'Aramanızla eşleşen ürün/hizmet bulunamadı.'; ?>
                     </td>
                 </tr>
-            <?php endforeach; ?>
-        <?php endif; ?>
-    </tbody>
-</table>
+            <?php else: ?>
+                <?php foreach ($products as $product): ?>
+                    <tr>
+                        <td>
+                            <strong><?php echo e($product['name']); ?></strong><br>
+                            <small><?php echo e(substr($product['description'] ?? '', 0, 70) . '...'); ?></small>
+                        </td>
+                        <td><?php echo e($product['unit']); ?></td>
+                        <td><?php echo e(number_format($product['price'], 2, ',', '.')); ?> TL</td>
+                        <td>
+                            <div class="grid" style="--grid-spacing: 0.5rem; min-width: 160px;">
+                                <a href="product_form.php?id=<?php echo e($product['id']); ?>" role="button" class="secondary outline">Düzenle</a>
+                                <a href="../api/product_handler.php?action=delete&id=<?php echo e($product['id']); ?>" role="button" class="contrast" onclick="return confirm('Bu ürünü silmek istediğinizden emin misiniz?');">Sil</a>
+                            </div>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </tbody>
+    </table>
+</figure>
+
+<style>
+/* Sayfa başlığı ve butonunu yan yana getirmek için */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+.page-title {
+    margin-bottom: 0;
+}
+.search-bar {
+    margin-bottom: 1rem;
+    padding: 1rem;
+}
+</style>
 
 <?php
 require_once __DIR__ . '/../includes/footer.php';

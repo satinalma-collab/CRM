@@ -2,72 +2,81 @@
 $page_title = 'Ürün/Hizmet Formu';
 require_once __DIR__ . '/../includes/header.php';
 
-// Bu sayfaya sadece giriş yapmış kullanıcılar erişebilir
 require_login();
 
-// Veritabanı bağlantısını al
 $pdo = get_db_connection();
 
-// Varsayılan değerler (Ekleme modu için)
-$product = [
-    'id' => '',
-    'name' => '',
-    'description' => '',
-    'unit' => '',
-    'price' => ''
-];
+// Varsayılan değerler
+$product = ['id' => '', 'name' => '', 'description' => '', 'unit' => '', 'price' => ''];
 $form_title = 'Yeni Ürün/Hizmet Ekle';
 $action_url = '../api/product_handler.php?action=create';
 
-// Düzenleme modunu kontrol et (URL'de id var mı?)
+// Düzenleme modunu kontrol et
 if (isset($_GET['id']) && is_numeric($_GET['id'])) {
     $product_id = $_GET['id'];
 
-    // Ürünün mevcut organizasyona ait olduğunu doğrula
     $stmt = $pdo->prepare("SELECT * FROM products WHERE id = ? AND organization_id = ?");
     $stmt->execute([$product_id, $_SESSION['organization_id']]);
-    $product = $stmt->fetch();
+    $product_data = $stmt->fetch();
 
-    // Ürün bulunamazsa veya başka organizasyona aitse, listeye yönlendir
-    if (!$product) {
+    if (!$product_data) {
         $_SESSION['error_message'] = 'Geçersiz ürün IDsi.';
         header('Location: products.php');
         exit;
     }
-
+    $product = $product_data;
     $form_title = 'Ürün/Hizmet Bilgilerini Düzenle';
     $action_url = '../api/product_handler.php?action=update';
 }
 ?>
 
-<div class="page-header">
-    <h1><?php echo e($form_title); ?></h1>
-    <a href="products.php" class="button-secondary">Geri Dön</a>
-</div>
+<header class="page-header">
+    <h1 class="page-title"><?php echo e($form_title); ?></h1>
+    <a href="products.php" role="button" class="secondary">Geri Dön</a>
+</header>
 
-<form action="<?php echo e($action_url); ?>" method="POST">
+<article>
+    <form action="<?php echo e($action_url); ?>" method="POST">
 
-    <?php // Düzenleme modunda ürün ID'sini gizli olarak gönder ?>
-    <?php if (!empty($product['id'])): ?>
-        <input type="hidden" name="product_id" value="<?php echo e($product['id']); ?>">
-    <?php endif; ?>
+        <?php if (!empty($product['id'])): ?>
+            <input type="hidden" name="product_id" value="<?php echo e($product['id']); ?>">
+        <?php endif; ?>
 
-    <label for="name">Ürün/Hizmet Adı:</label>
-    <input type="text" id="name" name="name" value="<?php echo e($product['name']); ?>" required>
+        <label for="name">Ürün/Hizmet Adı</label>
+        <input type="text" id="name" name="name" value="<?php echo e($product['name']); ?>" placeholder="Ürün veya hizmetin tam adı" required>
 
-    <label for="description">Açıklama:</label>
-    <textarea id="description" name="description" rows="4"><?php echo e($product['description']); ?></textarea>
+        <label for="description">Açıklama</label>
+        <textarea id="description" name="description" rows="4" placeholder="Ürünle ilgili detaylar"><?php echo e($product['description']); ?></textarea>
 
-    <label for="unit">Birim (örn: adet, kg, saat, m²):</label>
-    <input type="text" id="unit" name="unit" value="<?php echo e($product['unit']); ?>">
+        <div class="grid">
+            <label for="unit">
+                Birim
+                <input type="text" id="unit" name="unit" value="<?php echo e($product['unit']); ?>" placeholder="adet, kg, saat, m²">
+            </label>
+            <label for="price">
+                Birim Fiyatı (TL)
+                <input type="number" step="0.01" id="price" name="price" value="<?php echo e($product['price']); ?>" placeholder="0.00" required>
+            </label>
+        </div>
 
-    <label for="price">Birim Fiyatı (TL):</label>
-    <input type="number" step="0.01" id="price" name="price" value="<?php echo e($product['price']); ?>" required>
+        <button type="submit">
+            <?php echo (isset($_GET['id'])) ? 'Güncelle' : 'Kaydet'; ?>
+        </button>
+    </form>
+</article>
 
-    <button type="submit">
-        <?php echo (isset($_GET['id'])) ? 'Güncelle' : 'Kaydet'; ?>
-    </button>
-</form>
+<style>
+/* Sayfa başlığı ve butonunu yan yana getirmek için */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+.page-title {
+    margin-bottom: 0;
+}
+</style>
 
 <?php
 require_once __DIR__ . '/../includes/footer.php';
