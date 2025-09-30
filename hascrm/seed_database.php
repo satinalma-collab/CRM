@@ -12,6 +12,19 @@ require_once __DIR__ . '/includes/db_connection.php';
 try {
     $pdo = get_db_connection();
 
+    // --- KONTROL ---
+    // Betiğin daha önce çalışıp çalışmadığını kontrol et
+    $check_stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE email = ?");
+    $check_stmt->execute(['test@example.com']);
+    if ($check_stmt->fetchColumn() > 0) {
+        echo "BİLGİ: Test kullanıcısı (test@example.com) zaten mevcut.\n";
+        echo "Veritabanı doldurma işlemi atlandı.\n";
+        echo "Veritabanını sıfırlamak isterseniz, önce 'database/hascrm.sqlite' dosyasını silip ardından 'setup_database.php' betiğini çalıştırabilirsiniz.\n";
+        exit;
+    }
+
+    // --- VERİ EKLEME ---
+
     // 1. Test Organizasyonu Oluştur
     $org_name = 'Monett Home';
     $org_logo = '/assets/images/logo_placeholder.png'; // Örnek logo yolu
