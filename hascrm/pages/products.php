@@ -9,17 +9,19 @@ $pdo = get_db_connection();
 // Arama terimini al
 $search_term = $_GET['search'] ?? '';
 
-// SQL sorgusunu arama terimine göre dinamik olarak oluştur
-$sql = "SELECT * FROM products WHERE organization_id = ?";
+// SQL sorgusunu kategori adını da içerecek şekilde JOIN ile güncelle
+$sql = "SELECT p.*, c.name as category_name
+        FROM products p
+        LEFT JOIN product_categories c ON p.category_id = c.id
+        WHERE p.organization_id = ?";
 $params = [$_SESSION['organization_id']];
 
 if (!empty($search_term)) {
-    // Arama terimi varsa, WHERE koşuluna ek yap
-    $sql .= " AND (name LIKE ? OR description LIKE ?)";
+    $sql .= " AND (p.name LIKE ? OR p.description LIKE ?)";
     $params[] = "%" . $search_term . "%";
     $params[] = "%" . $search_term . "%";
 }
-$sql .= " ORDER BY name ASC";
+$sql .= " ORDER BY p.name ASC";
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
@@ -44,8 +46,9 @@ $products = $stmt->fetchAll();
     <table>
         <thead>
             <tr>
+                <th scope="col" style="width: 5%;"></th>
                 <th scope="col">Ürün/Hizmet Adı</th>
-                <th scope="col">Birim</th>
+                <th scope="col">Kategori</th>
                 <th scope="col">Fiyat</th>
                 <th scope="col">İşlemler</th>
             </tr>
@@ -53,7 +56,7 @@ $products = $stmt->fetchAll();
         <tbody>
             <?php if (empty($products)): ?>
                 <tr>
-                    <td colspan="4" style="text-align:center;">
+                    <td colspan="5" style="text-align:center;">
                         <?php echo empty($search_term) ? 'Henüz hiç ürün veya hizmet eklenmemiş.' : 'Aramanızla eşleşen ürün/hizmet bulunamadı.'; ?>
                     </td>
                 </tr>
@@ -61,11 +64,16 @@ $products = $stmt->fetchAll();
                 <?php foreach ($products as $product): ?>
                     <tr>
                         <td>
+                            <?php if(!empty($product['image_url'])): ?>
+                                <img src="/<?php echo e($product['image_url']); ?>" alt="<?php echo e($product['name']); ?>" style="width: 50px; height: 50px; object-fit: cover;">
+                            <?php endif; ?>
+                        </td>
+                        <td>
                             <strong><?php echo e($product['name']); ?></strong><br>
                             <small><?php echo e(substr($product['description'] ?? '', 0, 70) . '...'); ?></small>
                         </td>
-                        <td><?php echo e($product['unit']); ?></td>
-                        <td><?php echo e(number_format($product['price'], 2, ',', '.')); ?> TL</td>
+                        <td><?php echo e($product['category_name'] ?? '---'); ?></td>
+                        <td><?php echo e(number_format($product['price'], 2, ',', '.')); ?> <?php echo e($product['currency']); ?></td>
                         <td>
                             <div class="grid" style="--grid-spacing: 0.5rem; min-width: 160px;">
                                 <a href="product_form.php?id=<?php echo e($product['id']); ?>" role="button" class="secondary outline">Düzenle</a>
@@ -81,19 +89,9 @@ $products = $stmt->fetchAll();
 
 <style>
 /* Sayfa başlığı ve butonunu yan yana getirmek için */
-.page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-}
-.page-title {
-    margin-bottom: 0;
-}
-.search-bar {
-    margin-bottom: 1rem;
-    padding: 1rem;
-}
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.page-title { margin-bottom: 0; }
+.search-bar { margin-bottom: 1rem; padding: 1rem; }
 </style>
 
 <?php

@@ -1,28 +1,26 @@
--- HasCRM Veritabanı Şeması
+-- HasCRM Veritabanı Şeması (Gelişmiş Sürüm)
 
 -- Organizasyonlar (Şirketler) Tablosu
--- Sisteme kaydolan her ana hesap bir organizasyondur.
 CREATE TABLE IF NOT EXISTS organizations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name VARCHAR(255) NOT NULL,
+    logo_url VARCHAR(255), -- Logo için alan eklendi
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Kullanıcılar Tablosu
--- Her kullanıcı bir organizasyona aittir.
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     organization_id INTEGER NOT NULL,
     name VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
-    role VARCHAR(50) DEFAULT 'sales', -- 'admin', 'sales' etc.
+    role VARCHAR(50) DEFAULT 'sales',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
 );
 
 -- Müşteriler Tablosu
--- Her müşteri bir organizasyona aittir.
 CREATE TABLE IF NOT EXISTS customers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     organization_id INTEGER NOT NULL,
@@ -34,20 +32,31 @@ CREATE TABLE IF NOT EXISTS customers (
     FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
 );
 
--- Ürünler/Servisler Tablosu
--- Her ürün bir organizasyona aittir.
-CREATE TABLE IF NOT EXISTS products (
+-- Ürün Kategorileri Tablosu (Yeni)
+CREATE TABLE IF NOT EXISTS product_categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     organization_id INTEGER NOT NULL,
     name VARCHAR(255) NOT NULL,
-    description TEXT,
-    unit VARCHAR(50), -- 'adet', 'kg', 'm2', 'saat' etc.
-    price DECIMAL(10, 2) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
 );
 
--- Teklifler/Proformalar Tablosu
+-- Ürünler/Servisler Tablosu (Güncellendi)
+CREATE TABLE IF NOT EXISTS products (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    organization_id INTEGER NOT NULL,
+    category_id INTEGER, -- Kategori ilişkisi için eklendi
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    unit VARCHAR(50),
+    price DECIMAL(10, 2) NOT NULL,
+    currency VARCHAR(10) DEFAULT 'TRY', -- Para birimi alanı eklendi
+    image_url VARCHAR(255), -- Ürün fotoğrafı için alan eklendi
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    FOREIGN KEY (category_id) REFERENCES product_categories(id) ON DELETE SET NULL
+);
+
+-- Teklifler/Proformalar Tablosu (Güncellendi)
 CREATE TABLE IF NOT EXISTS proposals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     organization_id INTEGER NOT NULL,
@@ -57,7 +66,10 @@ CREATE TABLE IF NOT EXISTS proposals (
     proposal_date DATE NOT NULL,
     valid_until_date DATE,
     total_amount DECIMAL(15, 2) NOT NULL,
-    status VARCHAR(50) DEFAULT 'draft', -- 'draft', 'sent', 'viewed', 'accepted', 'rejected'
+    currency VARCHAR(10) DEFAULT 'TRY', -- Para birimi alanı eklendi
+    delivery_terms TEXT, -- Teslimat şartları eklendi
+    payment_terms TEXT, -- Ödeme şartları eklendi
+    status VARCHAR(50) DEFAULT 'draft',
     share_token VARCHAR(64) NOT NULL UNIQUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (organization_id) REFERENCES organizations(id),
@@ -66,12 +78,11 @@ CREATE TABLE IF NOT EXISTS proposals (
 );
 
 -- Teklif Kalemleri Tablosu
--- Her teklif birden çok üründen/kalemden oluşabilir.
 CREATE TABLE IF NOT EXISTS proposal_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     proposal_id INTEGER NOT NULL,
-    product_id INTEGER, -- Ürün katalogdan seçilmemişse NULL olabilir
-    name VARCHAR(255) NOT NULL, -- Ürün adı manuel de girilebilir
+    product_id INTEGER,
+    name VARCHAR(255) NOT NULL,
     description TEXT,
     quantity DECIMAL(10, 2) NOT NULL,
     unit VARCHAR(50),

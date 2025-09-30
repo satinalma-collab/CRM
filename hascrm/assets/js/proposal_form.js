@@ -1,11 +1,40 @@
+// Global state
+const openModal = (modal) => {
+  if (modal) {
+    modal.setAttribute('open', 'true');
+  }
+};
+
+const closeModal = (modal) => {
+  if (modal) {
+    modal.removeAttribute('open');
+  }
+};
+
+const toggleModal = (event) => {
+    event.preventDefault();
+    const modal = document.getElementById(event.currentTarget.dataset.target);
+    if (!modal) return;
+    modal.getAttribute('open') ? closeModal(modal) : openModal(modal);
+};
+
+
 document.addEventListener('DOMContentLoaded', function() {
-    const addItemBtn = document.getElementById('add-item-btn');
     const itemsTableBody = document.getElementById('proposal-items-body');
     const itemTemplate = document.getElementById('item-template');
+    const currencySelect = document.getElementById('currency');
+    const productModal = document.getElementById('product-modal');
 
-    // Yeni bir satır ekler
-    function addNewItem() {
+    // Bir ürünü teklife ekler
+    function addItemFromProduct(product) {
         const clone = itemTemplate.content.cloneNode(true);
+        const row = clone.querySelector('tr');
+
+        row.querySelector('.item-product-id').value = product.id;
+        row.querySelector('.item-name').value = product.name;
+        row.querySelector('.item-unit').value = product.unit;
+        row.querySelector('.item-price').value = parseFloat(product.price).toFixed(2);
+
         itemsTableBody.appendChild(clone);
         attachRowEventListeners(itemsTableBody.lastElementChild);
         updateTotals();
@@ -25,32 +54,13 @@ document.addEventListener('DOMContentLoaded', function() {
         inputs.forEach(input => {
             input.addEventListener('input', updateTotals);
         });
-
-        // Basit bir otomatik tamamlama
-        const nameInput = row.querySelector('.item-name');
-        nameInput.addEventListener('input', () => {
-            const value = nameInput.value.toLowerCase();
-            if (value.length < 2) return;
-
-            const match = productCatalog.find(p => p.name.toLowerCase().startsWith(value));
-            if (match) {
-                // Öneri göstermek yerine direkt dolduruyoruz (basit implementasyon)
-                // Daha gelişmiş bir yapı için bir dropdown listesi oluşturulabilir.
-                if (nameInput.value !== match.name) {
-                    nameInput.value = match.name;
-                    row.querySelector('.item-product-id').value = match.id;
-                    row.querySelector('.item-unit').value = match.unit;
-                    row.querySelector('.item-price').value = match.price;
-                    updateTotals();
-                }
-            }
-        });
     }
 
     // Tüm toplamları günceller
     function updateTotals() {
         let subtotal = 0;
         let totalDiscount = 0;
+        const currency = currencySelect.value;
 
         itemsTableBody.querySelectorAll('tr').forEach(row => {
             const quantity = parseFloat(row.querySelector('.item-quantity').value) || 0;
@@ -64,19 +74,40 @@ document.addEventListener('DOMContentLoaded', function() {
             subtotal += lineTotalBeforeDiscount;
             totalDiscount += lineDiscountAmount;
 
-            row.querySelector('.item-line-total').textContent = lineTotal.toFixed(2) + ' TL';
+            row.querySelector('.item-line-total').textContent = `${lineTotal.toFixed(2)} ${currency}`;
         });
 
         const grandTotal = subtotal - totalDiscount;
 
-        document.getElementById('subtotal').textContent = subtotal.toFixed(2) + ' TL';
-        document.getElementById('total-discount').textContent = totalDiscount.toFixed(2) + ' TL';
-        document.getElementById('grand-total').innerHTML = `<strong>${grandTotal.toFixed(2)} TL</strong>`;
+        document.getElementById('subtotal').textContent = `${subtotal.toFixed(2)} ${currency}`;
+        document.getElementById('total-discount').textContent = `${totalDiscount.toFixed(2)} ${currency}`;
+        document.getElementById('grand-total').innerHTML = `<strong>${grandTotal.toFixed(2)} ${currency}</strong>`;
     }
 
-    // Başlangıç için bir satır ekle
-    addNewItem();
+    // --- Olay Dinleyicileri ---
 
-    // Buton olay dinleyicisi
-    addItemBtn.addEventListener('click', addNewItem);
+    // Modal'daki ürün kartlarına tıklama olayı
+    document.querySelectorAll('.product-card').forEach(card => {
+        card.addEventListener('click', () => {
+            const productId = card.dataset.productId;
+            const product = productCatalog.find(p => p.id == productId);
+            if (product) {
+                addItemFromProduct(product);
+                closeModal(productModal);
+            }
+        });
+    });
+
+    // Para birimi değiştiğinde toplamları güncelle
+    currencySelect.addEventListener('change', updateTotals);
+
+    // Modal kapatma düğmesi
+    const closeButton = productModal.querySelector('.close');
+    if(closeButton) {
+        closeButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            closeModal(productModal);
+        });
+    }
+
 });

@@ -10,20 +10,20 @@ echo "<pre>"; // Daha okunaklı çıktı için
 require_once __DIR__ . '/includes/db_connection.php';
 
 try {
-    // Veritabanı bağlantısını al
     $pdo = get_db_connection();
 
     // 1. Test Organizasyonu Oluştur
-    $org_name = 'Test Organizasyonu';
-    $stmt = $pdo->prepare("INSERT INTO organizations (name) VALUES (?)");
-    $stmt->execute([$org_name]);
+    $org_name = 'Monett Home';
+    $org_logo = '/assets/images/logo_placeholder.png'; // Örnek logo yolu
+    $stmt = $pdo->prepare("INSERT INTO organizations (name, logo_url) VALUES (?, ?)");
+    $stmt->execute([$org_name, $org_logo]);
     $organization_id = $pdo->lastInsertId();
     echo "Organizasyon oluşturuldu: '" . htmlspecialchars($org_name) . "' (ID: $organization_id)\n";
 
     // 2. Test Kullanıcısı Oluştur
-    $user_name = 'Test Kullanıcısı';
+    $user_name = 'Mümin Vatansever';
     $user_email = 'test@example.com';
-    $user_password = 'password'; // Test için basit bir şifre
+    $user_password = 'password';
     $password_hash = password_hash($user_password, PASSWORD_DEFAULT);
 
     $stmt = $pdo->prepare(
@@ -32,6 +32,14 @@ try {
     $stmt->execute([$organization_id, $user_name, $user_email, $password_hash, 'admin']);
     $user_id = $pdo->lastInsertId();
     echo "Kullanıcı oluşturuldu: '" . htmlspecialchars($user_name) . "' (ID: $user_id)\n";
+
+    // 3. Örnek Ürün Kategorileri Oluştur
+    $categories = ['Koltuk Takımları', 'Yemek Odası', 'Yatak Odası', 'Aksesuarlar'];
+    $cat_stmt = $pdo->prepare("INSERT INTO product_categories (organization_id, name) VALUES (?, ?)");
+    foreach ($categories as $category) {
+        $cat_stmt->execute([$organization_id, $category]);
+        echo "Kategori oluşturuldu: '" . htmlspecialchars($category) . "'\n";
+    }
 
     echo "\n--------------------------------------------------\n";
     echo "VERİTABANI BAŞARIYLA DOLDURULDU!\n";

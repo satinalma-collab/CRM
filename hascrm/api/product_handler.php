@@ -1,18 +1,13 @@
 <?php
 session_start();
 
-// Gerekli çekirdek dosyaları dahil et
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../includes/db_connection.php';
 require_once __DIR__ . '/../includes/functions.php';
 
-// Sadece giriş yapmış kullanıcılar işlem yapabilir
 require_login();
 
-// Veritabanı bağlantısını al
 $pdo = get_db_connection();
-
-// Hangi işlemin yapılacağını belirle
 $action = $_GET['action'] ?? '';
 
 try {
@@ -31,87 +26,113 @@ try {
             header('Location: ../pages/products.php');
             exit;
     }
-} catch (PDOException $e) {
+} catch (Exception $e) {
     error_log("Ürün İşlemi Hatası: " . $e->getMessage());
-    $_SESSION['error_message'] = 'Bir veritabanı hatası oluştu. İşlem gerçekleştirilemedi.';
+    $_SESSION['error_message'] = 'Bir hata oluştu: ' . $e->getMessage();
     header('Location: ../pages/products.php');
     exit;
 }
 
 /**
- * Yeni ürün oluşturma işlemini yönetir.
+ * Dosya yükleme işlemini yönetir.
+ * @return string|null Yüklenen dosyanın yolu veya bir hata durumunda null.
  */
+function handle_image_upload() {
+    if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+        $upload_dir = __DIR__ . '/../assets/uploads/products/';
+        if (!is_dir($upload_dir)) {
+            mkdir($upload_dir, 0755, true);
+        }
+
+        $file_name = uniqid() . '-' . basename($_FILES['image']['name']);
+        $target_path = $upload_dir . $file_name;
+        $db_path = 'assets/uploads/products/' . $file_name;
+
+        // Dosyayı taşı
+        if (move_uploaded_file($_FILES['image']['tmp_name'], $target_path)) {
+            return $db_path;
+        } else {
+            throw new Exception('Dosya yüklenirken bir hata oluştu.');
+        }
+    }
+    return null; // Yeni dosya yüklenmedi
+}
+
 function handle_create($pdo) {
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        header('Location: ../pages/products.php');
-        exit;
-    }
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') exit;
 
-    $name = $_POST['name'] ?? '';
-    $description = $_POST['description'] ?? null;
-    $unit = $_POST['unit'] ?? null;
-    $price = $_POST['price'] ?? 0;
-
-    if (empty($name) || !is_numeric($price)) {
-        $_SESSION['error_message'] = 'Ürün adı ve geçerli bir fiyat zorunludur.';
-        header('Location: ../pages/product_form.php');
-        exit;
-    }
+    $image_url = handle_image_upload();
 
     $stmt = $pdo->prepare(
-        "INSERT INTO products (organization_id, name, description, unit, price) VALUES (?, ?, ?, ?, ?)"
+        "INSERT INTO products (organization_id, category_id, name, description, unit, price, currency, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     );
-    $stmt->execute([$_SESSION['organization_id'], $name, $description, $unit, $price]);
+    $stmt->execute([
+        $_SESSION['organization_id'],
+        $_POST['category_id'] ?: null,
+        $_POST['name'],
+        $_POST['description'],
+        $_POST['unit'],
+        $_POST['price'],
+        $_POST['currency'],
+        $image_url
+    ]);
 
-    $_SESSION['success_message'] = 'Ürün/Hizmet başarıyla oluşturuldu.';
+    $_SESSION['success_message'] = 'Ürün başarıyla oluşturuldu.';
     header('Location: ../pages/products.php');
     exit;
 }
 
-/**
- * Ürün güncelleme işlemini yönetir.
- */
 function handle_update($pdo) {
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        header('Location: ../pages/products.php');
-        exit;
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') exit;
+
+    $product_id = $_POST['product_id'] ?? 0;
+    if (empty($product_id)) {
+        throw new Exception('Geçersiz Ürün IDsi.');
     }
 
-    $id = $_POST['product_id'] ?? 0;
-    $name = $_POST['name'] ?? '';
-    $description = $_POST['description'] ?? null;
-    $unit = $_POST['unit'] ?? null;
-    $price = $_POST['price'] ?? 0;
+    // Mevcut ürünü getir (eski resmi silmek için gerekebilir)
+    $stmt = $pdo->prepare("SELECT image_url FROM products WHERE id = ? AND organization_id = ?");
+    $stmt->execute([$product_id, $_SESSION['organization_id']]);
+    $product = $stmt->fetch();
 
-    if (empty($name) || empty($id) || !is_numeric($price)) {
-        $_SESSION['error_message'] = 'Ürün adı, ID ve geçerli bir fiyat zorunludur.';
-        header('Location: ../pages/product_form.php?id=' . $id);
-        exit;
+    if (!$product) {
+        throw new Exception('Bu işlem için yetkiniz yok.');
     }
 
-    // Güvenlik: Kullanıcının bu ürünü güncelleme yetkisi var mı?
-    $stmt = $pdo->prepare("SELECT id FROM products WHERE id = ? AND organization_id = ?");
-    $stmt->execute([$id, $_SESSION['organization_id']]);
-    if ($stmt->fetchColumn() === false) {
-        $_SESSION['error_message'] = 'Bu işlem için yetkiniz yok.';
-        header('Location: ../pages/products.php');
-        exit;
+    $image_url = handle_image_upload();
+
+    if ($image_url && $product['image_url'] && file_exists(__DIR__ . '/../' . $product['image_url'])) {
+        unlink(__DIR__ . '/../' . $product['image_url']); // Eski resmi sil
     }
 
-    $stmt = $pdo->prepare(
-        "UPDATE products SET name = ?, description = ?, unit = ?, price = ? WHERE id = ?"
-    );
-    $stmt->execute([$name, $description, $unit, $price, $id]);
+    $sql = "UPDATE products SET category_id=?, name=?, description=?, unit=?, price=?, currency=? ";
+    $params = [
+        $_POST['category_id'] ?: null,
+        $_POST['name'],
+        $_POST['description'],
+        $_POST['unit'],
+        $_POST['price'],
+        $_POST['currency']
+    ];
 
-    $_SESSION['success_message'] = 'Ürün/Hizmet başarıyla güncellendi.';
+    if ($image_url) {
+        $sql .= ", image_url=? ";
+        $params[] = $image_url;
+    }
+
+    $sql .= "WHERE id = ?";
+    $params[] = $product_id;
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+
+    $_SESSION['success_message'] = 'Ürün başarıyla güncellendi.';
     header('Location: ../pages/products.php');
     exit;
 }
 
-/**
- * Ürün silme işlemini yönetir.
- */
 function handle_delete($pdo) {
+    // ... (silme fonksiyonu aynı kalabilir) ...
     $id = $_GET['id'] ?? 0;
 
     if (empty($id)) {
@@ -121,9 +142,10 @@ function handle_delete($pdo) {
     }
 
     // Güvenlik: Kullanıcının bu ürünü silme yetkisi var mı?
-    $stmt = $pdo->prepare("SELECT id FROM products WHERE id = ? AND organization_id = ?");
+    $stmt = $pdo->prepare("SELECT image_url FROM products WHERE id = ? AND organization_id = ?");
     $stmt->execute([$id, $_SESSION['organization_id']]);
-    if ($stmt->fetchColumn() === false) {
+    $product = $stmt->fetch();
+    if ($product === false) {
         $_SESSION['error_message'] = 'Bu işlem için yetkiniz yok.';
         header('Location: ../pages/products.php');
         exit;
@@ -138,6 +160,11 @@ function handle_delete($pdo) {
         exit;
     }
 
+    // Ürünü ve ilişkili resmi sil
+    if ($product['image_url'] && file_exists(__DIR__ . '/../' . $product['image_url'])) {
+        unlink(__DIR__ . '/../' . $product['image_url']);
+    }
+
     $stmt = $pdo->prepare("DELETE FROM products WHERE id = ?");
     $stmt->execute([$id]);
 
@@ -145,5 +172,4 @@ function handle_delete($pdo) {
     header('Location: ../pages/products.php');
     exit;
 }
-
 ?>
