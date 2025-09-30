@@ -1,7 +1,10 @@
 <?php
 session_start();
+
+// Gerekli tüm çekirdek dosyaları burada topluyoruz.
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/db_connection.php'; // EKSİK OLAN VE HATAYA NEDEN OLAN SATIR EKLENDİ
 
 // Pico.css için tema ayarını cookie üzerinden yapabiliriz.
 $theme = $_COOKIE['theme'] ?? 'light';
