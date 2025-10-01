@@ -10,7 +10,7 @@ require_login();
 $pdo = get_db_connection();
 $action = $_GET['action'] ?? '';
 
-// Yönlendirme ve hata yönetimi
+// Yönlendirme ve hata yönetimi için yardımcı fonksiyon
 function redirect_with_message($type, $message, $location) {
     $_SESSION[$type] = $message;
     header("Location: $location");
@@ -70,11 +70,9 @@ function handle_proposal($pdo, $is_update = false) {
 
     if ($is_update) {
         // --- GÜNCELLEME İŞLEMİ ---
-        // 1. Eski kalemleri sil
         $delete_stmt = $pdo->prepare("DELETE FROM proposal_items WHERE proposal_id = ?");
         $delete_stmt->execute([$proposal_id]);
 
-        // 2. Ana teklifi güncelle
         $update_stmt = $pdo->prepare(
             "UPDATE proposals SET customer_id=?, title=?, proposal_date=?, valid_until_date=?, total_amount=?, currency=?, delivery_terms=?, payment_terms=? WHERE id = ? AND organization_id = ?"
         );
@@ -82,7 +80,6 @@ function handle_proposal($pdo, $is_update = false) {
             $customer_id, $title, $proposal_date, $valid_until_date, $total_amount, $currency, $delivery_terms, $payment_terms, $proposal_id, $_SESSION['organization_id']
         ]);
         $message = 'Teklif başarıyla güncellendi.';
-
     } else {
         // --- OLUŞTURMA İŞLEMİ ---
         $share_token = bin2hex(random_bytes(32));
@@ -96,9 +93,10 @@ function handle_proposal($pdo, $is_update = false) {
         $message = 'Teklif başarıyla oluşturuldu.';
     }
 
-    // Yeni teklif kalemlerini (hem create hem de update için) ekle
+    // Yeni teklif kalemlerini ekle
     $item_stmt = $pdo->prepare(
-        "INSERT INTO proposal_items (proposal_id, product_id, name, quantity, unit, unit_price, discount_percentage, line_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO proposal_items (proposal_id, product_id, name, description, quantity, unit, unit_price, discount_percentage, line_total)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
     foreach ($items['name'] as $key => $name) {
         $line_total = ((float)$items['quantity'][$key] * (float)$items['unit_price'][$key]) * (1 - (float)$items['discount_percentage'][$key] / 100);
@@ -106,6 +104,7 @@ function handle_proposal($pdo, $is_update = false) {
             $proposal_id,
             !empty($items['product_id'][$key]) ? (int)$items['product_id'][$key] : null,
             $name,
+            null, // Açıklama alanı formda yok, null olarak ekliyoruz
             (float)$items['quantity'][$key],
             $items['unit'][$key],
             (float)$items['unit_price'][$key],
@@ -118,8 +117,26 @@ function handle_proposal($pdo, $is_update = false) {
     redirect_with_message('success_message', $message, '../pages/proposals.php');
 }
 
-
+/**
+ * Teklif silme işlemini yönetir.
+ */
 function handle_delete($pdo) {
-    // ... (silme fonksiyonu aynı kalabilir) ...
+    $id = $_GET['id'] ?? 0;
+    if (empty($id)) {
+        redirect_with_message('error_message', 'Geçersiz teklif IDsi.', '../pages/proposals.php');
+    }
+
+    // Güvenlik: Kullanıcının bu teklifi silme yetkisi var mı?
+    $stmt = $pdo->prepare("SELECT id FROM proposals WHERE id = ? AND organization_id = ?");
+    $stmt->execute([$id, $_SESSION['organization_id']]);
+    if ($stmt->fetchColumn() === false) {
+        redirect_with_message('error_message', 'Bu işlem için yetkiniz yok.', '../pages/proposals.php');
+    }
+
+    // CASCADE DELETE sayesinde, bu teklife ait kalemler ve izlenme kayıtları da silinecektir.
+    $stmt = $pdo->prepare("DELETE FROM proposals WHERE id = ?");
+    $stmt->execute([$id]);
+
+    redirect_with_message('success_message', 'Teklif başarıyla silindi.', '../pages/proposals.php');
 }
 ?>
