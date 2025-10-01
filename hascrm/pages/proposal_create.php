@@ -1,5 +1,5 @@
 <?php
-$page_title = 'Teklif Oluştur';
+$page_title = 'Teklif Formu';
 require_once __DIR__ . '/../includes/header.php';
 require_login();
 
@@ -14,15 +14,33 @@ $products_stmt = $pdo->prepare("SELECT * FROM products WHERE organization_id = ?
 $products_stmt->execute([$_SESSION['organization_id']]);
 $products = $products_stmt->fetchAll();
 
-// Varsayılan değerler
+// Varsayılan değerler (Ekleme modu)
 $proposal = ['id' => '', 'title' => '', 'customer_id' => '', 'proposal_date' => date('Y-m-d'), 'valid_until_date' => date('Y-m-d', strtotime('+30 days')), 'currency' => 'TRY', 'delivery_terms' => '', 'payment_terms' => ''];
+$proposal_items = [];
 $form_title = 'Yeni Teklif Oluştur';
 $action = 'create';
 
-// Düzenleme modu (şimdilik basit)
-if (isset($_GET['id'])) {
+// Düzenleme modu
+if (isset($_GET['id']) && is_numeric($_GET['id'])) {
+    $proposal_id = $_GET['id'];
     $form_title = 'Teklifi Düzenle';
     $action = 'update';
+
+    // Teklifi ve kalemlerini veritabanından çek
+    $stmt = $pdo->prepare("SELECT * FROM proposals WHERE id = ? AND organization_id = ?");
+    $stmt->execute([$proposal_id, $_SESSION['organization_id']]);
+    $proposal_data = $stmt->fetch();
+
+    if (!$proposal_data) {
+        $_SESSION['error_message'] = 'Geçersiz teklif veya bu işlem için yetkiniz yok.';
+        header('Location: proposals.php');
+        exit;
+    }
+    $proposal = $proposal_data;
+
+    $items_stmt = $pdo->prepare("SELECT * FROM proposal_items WHERE proposal_id = ? ORDER BY id");
+    $items_stmt->execute([$proposal_id]);
+    $proposal_items = $items_stmt->fetchAll();
 }
 ?>
 
@@ -54,45 +72,69 @@ if (isset($_GET['id'])) {
         <input type="hidden" name="proposal_id" value="<?php echo e($proposal['id']); ?>">
 
         <div class="grid">
-            <label for="title">Teklif Başlığı</label>
-            <input type="text" id="title" name="title" value="<?php echo e($proposal['title']); ?>" required>
+            <label for="title">Teklif Başlığı
+                <input type="text" id="title" name="title" value="<?php echo e($proposal['title']); ?>" required>
+            </label>
         </div>
         <div class="grid">
-            <label for="customer_id">Müşteri</label>
-            <select id="customer_id" name="customer_id" required>
-                <option value="">Seçin...</option>
-                <?php foreach ($customers as $customer): ?>
-                    <option value="<?php echo e($customer['id']); ?>"><?php echo e($customer['name']); ?></option>
-                <?php endforeach; ?>
-            </select>
-            <label for="currency">Para Birimi</label>
-            <select id="currency" name="currency">
-                <option value="TRY" selected>TRY</option>
-                <option value="USD">USD</option>
-                <option value="EUR">EUR</option>
-            </select>
+            <label for="customer_id">Müşteri
+                <select id="customer_id" name="customer_id" required>
+                    <option value="">Seçin...</option>
+                    <?php foreach ($customers as $customer): ?>
+                        <option value="<?php echo e($customer['id']); ?>" <?php echo ($customer['id'] == $proposal['customer_id']) ? 'selected' : ''; ?>>
+                            <?php echo e($customer['name']); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+            <label for="currency">Para Birimi
+                <select id="currency" name="currency">
+                    <option value="TRY" <?php echo ($proposal['currency'] == 'TRY') ? 'selected' : ''; ?>>TRY</option>
+                    <option value="USD" <?php echo ($proposal['currency'] == 'USD') ? 'selected' : ''; ?>>USD</option>
+                    <option value="EUR" <?php echo ($proposal['currency'] == 'EUR') ? 'selected' : ''; ?>>EUR</option>
+                </select>
+            </label>
         </div>
         <div class="grid">
-            <label for="proposal_date">Teklif Tarihi</label>
-            <input type="date" id="proposal_date" name="proposal_date" value="<?php echo e($proposal['proposal_date']); ?>" required>
-            <label for="valid_until_date">Geçerlilik Tarihi</label>
-            <input type="date" id="valid_until_date" name="valid_until_date" value="<?php echo e($proposal['valid_until_date']); ?>">
+            <label for="proposal_date">Teklif Tarihi
+                <input type="date" id="proposal_date" name="proposal_date" value="<?php echo e($proposal['proposal_date']); ?>" required>
+            </label>
+            <label for="valid_until_date">Geçerlilik Tarihi
+                <input type="date" id="valid_until_date" name="valid_until_date" value="<?php echo e($proposal['valid_until_date']); ?>">
+            </label>
         </div>
 
         <h3 style="margin-top: 2rem;">Teklif Kalemleri</h3>
         <figure>
             <table id="proposal-items-table" role="grid">
                 <thead><tr><th>Ürün/Hizmet</th><th style="width: 10%;">Miktar</th><th style="width: 10%;">Birim</th><th style="width: 15%;">Birim Fiyat</th><th style="width: 10%;">İndirim (%)</th><th style="width: 15%;">Satır Toplamı</th><th style="width: 5%;"></th></tr></thead>
-                <tbody id="proposal-items-body"></tbody>
+                <tbody id="proposal-items-body">
+                    <?php foreach ($proposal_items as $item): ?>
+                        <tr>
+                            <td>
+                                <input type="hidden" name="items[product_id][]" class="item-product-id" value="<?php echo e($item['product_id']); ?>">
+                                <input type="text" name="items[name][]" class="item-name" value="<?php echo e($item['name']); ?>" required>
+                            </td>
+                            <td><input type="number" name="items[quantity][]" class="item-quantity" value="<?php echo e($item['quantity']); ?>" step="any" required></td>
+                            <td><input type="text" name="items[unit][]" class="item-unit" value="<?php echo e($item['unit']); ?>"></td>
+                            <td><input type="number" name="items[unit_price][]" class="item-price" value="<?php echo e($item['unit_price']); ?>" step="any" required></td>
+                            <td><input type="number" name="items[discount_percentage][]" class="item-discount" value="<?php echo e($item['discount_percentage']); ?>" step="any"></td>
+                            <td class="item-line-total" style="text-align:right;">0.00 TL</td>
+                            <td><button type="button" class="remove-item-btn secondary outline" style="padding: 0.25rem 0.5rem;">X</button></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
             </table>
         </figure>
         <button type="button" data-target="product-modal" onClick="toggleModal(event)">Görselden Ürün Ekle</button>
 
         <div class="grid" style="margin-top: 2rem;">
-            <label for="delivery_terms">Teslimat Şartları</label>
-            <textarea id="delivery_terms" name="delivery_terms" rows="3"></textarea>
-            <label for="payment_terms">Ödeme Şartları</label>
-            <textarea id="payment_terms" name="payment_terms" rows="3"></textarea>
+            <label for="delivery_terms">Teslimat Şartları
+                <textarea id="delivery_terms" name="delivery_terms" rows="3"><?php echo e($proposal['delivery_terms']); ?></textarea>
+            </label>
+            <label for="payment_terms">Ödeme Şartları
+                <textarea id="payment_terms" name="payment_terms" rows="3"><?php echo e($proposal['payment_terms']); ?></textarea>
+            </label>
         </div>
 
         <div class="grid" style="margin-top: 2rem;">
@@ -104,7 +146,7 @@ if (isset($_GET['id'])) {
             </tbody></table></div>
         </div>
 
-        <button type="submit" style="margin-top: 1rem;">Teklifi Kaydet</button>
+        <button type="submit" style="margin-top: 1rem;"><?php echo $is_update ? 'Güncelle' : 'Kaydet'; ?></button>
     </form>
 </article>
 

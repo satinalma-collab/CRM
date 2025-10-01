@@ -1,29 +1,20 @@
-// Global state
-const openModal = (modal) => {
-  if (modal) {
-    modal.setAttribute('open', 'true');
-  }
-};
-
-const closeModal = (modal) => {
-  if (modal) {
-    modal.removeAttribute('open');
-  }
-};
-
+// Global state for modal
+const openModal = (modal) => modal && modal.setAttribute('open', 'true');
+const closeModal = (modal) => modal && modal.removeAttribute('open');
 const toggleModal = (event) => {
     event.preventDefault();
     const modal = document.getElementById(event.currentTarget.dataset.target);
-    if (!modal) return;
-    modal.getAttribute('open') ? closeModal(modal) : openModal(modal);
+    if (modal) {
+        modal.getAttribute('open') ? closeModal(modal) : openModal(modal);
+    }
 };
-
 
 document.addEventListener('DOMContentLoaded', function() {
     const itemsTableBody = document.getElementById('proposal-items-body');
     const itemTemplate = document.getElementById('item-template');
     const currencySelect = document.getElementById('currency');
     const productModal = document.getElementById('product-modal');
+    const addItemBtn = document.querySelector('[data-target="product-modal"]');
 
     // Bir ürünü teklife ekler
     function addItemFromProduct(product) {
@@ -84,7 +75,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('grand-total').innerHTML = `<strong>${grandTotal.toFixed(2)} ${currency}</strong>`;
     }
 
-    // --- Olay Dinleyicileri ---
+    // --- Olay Dinleyicileri ve Başlangıç Ayarları ---
 
     // Modal'daki ürün kartlarına tıklama olayı
     document.querySelectorAll('.product-card').forEach(card => {
@@ -110,4 +101,20 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // "Ürün Ekle" butonuna tıklama olayı
+    if(addItemBtn) {
+        addItemBtn.addEventListener('click', toggleModal);
+    }
+
+    // --- DÜZELTME: Sayfa yüklendiğinde mevcut satırlara olay dinleyicileri ekle ve toplamları hesapla ---
+    const existingRows = itemsTableBody.querySelectorAll('tr');
+    if (existingRows.length > 0) {
+        existingRows.forEach(row => {
+            attachRowEventListeners(row);
+        });
+        updateTotals(); // Mevcut verilerle toplamları hesapla
+    } else {
+        // Eğer hiç satır yoksa (yeni teklif modu), boş bir satır ekle
+        addItemFromProduct({ id: '', name: '', unit: 'adet', price: '0.00' });
+    }
 });
